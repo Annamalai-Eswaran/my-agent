@@ -93,7 +93,8 @@ public static class WorkItemTools
                     ["title"] = Field(wi.Fields, "System.Title"),
                     ["state"] = Field(wi.Fields, "System.State"),
                     ["workItemType"] = Field(wi.Fields, "System.WorkItemType"),
-                    ["assignedTo"] = (wi.Fields.TryGetValue("System.AssignedTo", out var at) ? at as Microsoft.VisualStudio.Services.WebApi.IdentityRef : null)?.DisplayName
+                    ["assignedTo"] = wi.Fields.TryGetValue("System.AssignedTo", out var at) && at is Microsoft.VisualStudio.Services.WebApi.IdentityRef identity1
+                        ? identity1.DisplayName : null
                 });
             }
             return new JsonObject { ["workItems"] = arr, ["count"] = arr.Count };
@@ -119,7 +120,8 @@ public static class WorkItemTools
                 ["title"] = Field(wi.Fields, "System.Title"),
                 ["state"] = Field(wi.Fields, "System.State"),
                 ["workItemType"] = Field(wi.Fields, "System.WorkItemType"),
-                ["assignedTo"] = (wi.Fields.TryGetValue("System.AssignedTo", out var at) ? at as Microsoft.VisualStudio.Services.WebApi.IdentityRef : null)?.DisplayName,
+                ["assignedTo"] = wi.Fields.TryGetValue("System.AssignedTo", out var at2) && at2 is Microsoft.VisualStudio.Services.WebApi.IdentityRef identity2
+                    ? identity2.DisplayName : null,
                 ["description"] = Field(wi.Fields, "System.Description"),
                 ["acceptanceCriteria"] = Field(wi.Fields, "Microsoft.VSTS.Common.AcceptanceCriteria")
             };

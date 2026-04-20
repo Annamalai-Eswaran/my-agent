@@ -40,7 +40,7 @@ while (true)
 
     JsonObject? request;
     try { request = JsonNode.Parse(line)?.AsObject(); }
-    catch { continue; }
+    catch (Exception ex) { log.WriteLine($"Failed to parse JSON request: {ex.Message}"); continue; }
     if (request == null) continue;
 
     var id = request["id"];

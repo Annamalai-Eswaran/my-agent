@@ -12,6 +12,7 @@ public static class BranchUtils
         slug = Regex.Replace(slug, @"[^a-z0-9]+", "-");
         slug = slug.Trim('-');
         if (slug.Length > 50) slug = slug[..50].TrimEnd('-');
+        if (string.IsNullOrEmpty(slug)) slug = "untitled";
         return slug;
     }
 
