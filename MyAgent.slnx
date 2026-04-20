@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MyAgent.Common/MyAgent.Common.csproj" />
+    <Project Path="src/MyAgent.McpServer.AzureDevOps/MyAgent.McpServer.AzureDevOps.csproj" />
+    <Project Path="src/MyAgent.Orchestrator/MyAgent.Orchestrator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MyAgent.McpServer.Tests/MyAgent.McpServer.Tests.csproj" />
+    <Project Path="tests/MyAgent.Orchestrator.Tests/MyAgent.Orchestrator.Tests.csproj" />
+  </Folder>
+</Solution>

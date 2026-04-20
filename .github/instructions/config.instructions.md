@@ -25,24 +25,25 @@ Follow these conventions for all configuration files in this repository.
   ```
   This means: at runtime, read the PAT from the `AZURE_DEVOPS_PAT` environment variable.
 
-## MCP Server Config (`config.json`)
+## MCP Server Config (`appsettings.json`)
 
-- `config.json` is the **single source of truth** for all agent configuration.
+- `src/MyAgent.Orchestrator/Configuration/appsettings.json` is the **single source of truth** for all agent configuration.
 - Every MCP server entry must include:
-  - `command`: the executable to run (e.g., `"node"`, `"python"`)
-  - `args`: array of arguments to pass to the command
-  - `enabled`: boolean — set to `false` to disable without removing the entry
-  - `env` (optional): key-value pairs of environment variables to pass to the server process
+  - `Command`: the executable to run (e.g., `"dotnet"`, `"npx"`)
+  - `Args`: array of arguments to pass to the command
+  - `Enabled`: boolean — set to `false` to disable without removing the entry
+  - `Env` (optional): key-value pairs of environment variable names to pass to the server process
 
 ```json
 {
-  "mcpServers": {
+  "McpServers": {
     "azure-devops": {
-      "command": "node",
-      "args": ["mcp-servers/azure-devops/dist/index.js"],
-      "enabled": true,
-      "env": {
-        "AZURE_DEVOPS_PAT": "${AZURE_DEVOPS_PAT}"
+      "Command": "dotnet",
+      "Args": ["run", "--project", "src/MyAgent.McpServer.AzureDevOps"],
+      "Enabled": true,
+      "Env": {
+        "AZURE_DEVOPS_ORG_URL": "https://dev.azure.com/NAF-Tech/",
+        "AZURE_DEVOPS_PAT_ENV": "AZURE_DEVOPS_PAT"
       }
     }
   }

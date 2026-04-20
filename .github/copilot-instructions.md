@@ -2,10 +2,10 @@
 
 ## Project Summary
 
-This repository contains an **AI-powered software engineering agent** that automates the daily developer workflow. It integrates with:
+This repository contains an **AI-powered software engineering agent** built in **.NET 8 (C#)**. It integrates with:
 
-- **Azure DevOps** (`https://dev.azure.com/NAF-Tech/`, project `NAF Marketing`) via MCP servers for work item management, branch creation, and pull request automation.
-- **GitHub Copilot with Claude Opus 4.6** as the LLM backbone for all AI reasoning and code generation.
+- **Azure DevOps** (`https://dev.azure.com/NAF-Tech/`, project `NAF Marketing`) via a custom .NET MCP server for work item management, branch creation, and pull request automation.
+- **Anthropic Claude (claude-opus-4.6)** as the LLM backbone via `Anthropic.SDK`.
 
 The agent follows a loop: fetch ADO work items → pick a task → create a feature branch → implement code → raise a PR back to Azure DevOps.
 
@@ -15,33 +15,45 @@ The agent follows a loop: fetch ADO work items → pick a task → create a feat
 
 ```
 my-agent/
-├── agent/                        # Python orchestrator
-│   ├── main.py                   # Entry point – agentic tool-calling loop
-│   ├── mcp_client.py             # MCP client manager (connects to all MCP servers)
-│   ├── tools.py                  # Built-in tools (ask_human, etc.)
-│   ├── prompts.py                # System prompt and message templates
-│   └── requirements.txt          # Python dependencies
+├── MyAgent.slnx                  # .NET solution file
+├── src/
+│   ├── MyAgent.Orchestrator/     # Main agent brain (console app)
+│   │   ├── Agent/
+│   │   │   ├── EngineerAgent.cs  # Core agentic loop
+│   │   │   ├── HumanLoop.cs      # ask_human: colored terminal I/O
+│   │   │   └── SystemPrompts.cs  # LLM system prompt constants
+│   │   ├── Configuration/
+│   │   │   ├── AgentConfig.cs    # Strongly-typed config model
+│   │   │   └── appsettings.json  # All config: LLM, ADO, MCP servers
+│   │   ├── Mcp/
+│   │   │   ├── McpClientManager.cs  # Stdio JSON-RPC MCP client
+│   │   │   ├── McpServerConfig.cs
+│   │   │   └── McpToolDefinition.cs
+│   │   └── Utils/
+│   │       ├── BranchUtils.cs    # Slugify + MakeBranchName
+│   │       └── StringExtensions.cs
+│   │
+│   ├── MyAgent.McpServer.AzureDevOps/  # Azure DevOps MCP server (stdio)
+│   │   ├── AzureDevOpsClient.cs  # VssConnection + PAT auth
+│   │   └── Tools/
+│   │       ├── WorkItemTools.cs
+│   │       ├── BranchTools.cs
+│   │       ├── PullRequestTools.cs
+│   │       └── RepositoryTools.cs
+│   │
+│   └── MyAgent.Common/           # Shared models (WorkItem, Repository, PullRequest)
 │
-├── mcp-servers/
-│   └── azure-devops/             # TypeScript MCP server for Azure DevOps
-│       ├── src/
-│       │   ├── index.ts          # MCP server entry point
-│       │   ├── client.ts         # Azure DevOps REST client helpers
-│       │   └── tools/            # Individual tool modules
-│       │       ├── work-items.ts
-│       │       ├── git.ts
-│       │       └── pull-requests.ts
-│       ├── package.json
-│       └── tsconfig.json
+├── tests/
+│   ├── MyAgent.Orchestrator.Tests/
+│   └── MyAgent.McpServer.Tests/
 │
 ├── scripts/
-│   ├── start.sh                  # Start everything (MCP server + agent)
-│   └── setup.sh                  # First-time environment setup
+│   ├── start.sh                  # dotnet run --project src/MyAgent.Orchestrator
+│   └── setup.sh                  # dotnet restore + dotnet build + env check
 │
-├── config.json                   # Single source of truth for agent configuration
-├── .env                          # Environment variables (never committed)
-├── AGENTS.md                     # Agent-readable instructions (root)
-├── CLAUDE.md                     # Claude-specific instructions (root)
+├── .env.example                  # Env variable template
+├── AGENTS.md                     # Agent-readable instructions
+├── CLAUDE.md                     # Claude-specific instructions
 └── docs/                         # Detailed documentation
 ```
 
@@ -49,55 +61,44 @@ my-agent/
 
 ## Build Instructions
 
-### MCP Server (TypeScript)
 ```bash
-cd mcp-servers/azure-devops
-npm install
-npm run build
-```
+# Restore and build everything
+dotnet restore MyAgent.slnx
+dotnet build MyAgent.slnx
 
-### Agent (Python)
-```bash
-cd agent
-pip install -r requirements.txt
-```
+# Run tests
+dotnet test MyAgent.slnx
 
-### Start Everything
-```bash
+# Start the agent
+dotnet run --project src/MyAgent.Orchestrator
+# or:
 ./scripts/start.sh
-# or directly:
-python agent/main.py
 ```
 
 ---
 
 ## Code Standards
 
-### Python
-- Follow **PEP 8** for all Python code.
-- Use **type hints** on all function signatures.
-- Use **async/await** patterns for all I/O operations.
-- Use **dataclasses** or **Pydantic models** for structured data.
-- Catch specific exceptions and log with context (not bare `except:`).
-- Use `python-dotenv` for environment variable loading.
-- All MCP client calls must have **timeout handling**.
+### C# / .NET
+- Target **net8.0** for all projects.
+- Enable `<Nullable>enable</Nullable>` and `<ImplicitUsings>enable</ImplicitUsings>`.
+- Use **records** for immutable data models; **classes** for services.
+- Use `async`/`await` for all I/O operations.
+- Follow Microsoft C# naming conventions (PascalCase types/methods, `_camelCase` private fields).
+- Register services via `Microsoft.Extensions.DependencyInjection` in `Program.cs`.
+- Use `ILogger<T>` for structured logging.
 
-### TypeScript
-- **Strict mode** enabled (`"strict": true` in `tsconfig.json`).
-- Target **ES2022**.
-- Use **Zod** for all MCP tool input validation schemas.
-- Use the `@modelcontextprotocol/sdk` patterns for tool registration.
-- All Azure DevOps API calls go through the `client.ts` connection helpers.
-- Export tool registration as `register*Tools(server: McpServer)` functions.
-- Handle API errors gracefully with meaningful, human-readable error messages.
-- Use **ES module syntax** (`import`/`export`).
-
-### MCP Tools
+### MCP Tools (C#)
 - Every tool must have a **clear, concise description** understandable by an LLM.
-- Input schemas must use **Zod** with descriptive field descriptions.
-- Tools should return **structured JSON** in the text content of the response.
-- Error responses must be **human-readable**.
-- Group related tools in the same file under a shared `register*Tools` function.
+- Input schemas are `JsonObject` with `["type"]`, `["properties"]`, and `["required"]`.
+- Tool handlers return a `JsonObject` — always catch exceptions and return `{ "error": "..." }`.
+- Gather all tool definitions via `GetDefinitions()` static methods.
+
+### Anthropic.SDK Usage
+- Use `Anthropic.SDK.Common.Tool` for tool definitions.
+- Create tools via `new Function(name, description, JsonNode.Parse(schemaJson))`.
+- `ToolResultContent.ToolUseId` (not `.Id`); `.Content` is a `string`.
+- `ToolUseContent.Input` is `JsonNode`.
 
 ---
 
@@ -106,6 +107,7 @@ python agent/main.py
 - All feature branches are created from `develop`.
 - Branch naming: `feature/ae/{work_item_id}-{slugified-description}`
   - Example: `feature/ae/1234-fix-login-page`
+- Use `BranchUtils.MakeBranchName(id, title)` to generate the name.
 
 ---
 
@@ -114,16 +116,15 @@ python agent/main.py
 - PRs are raised to **Azure DevOps** targeting the `develop` branch.
 - PR title format: `[AB#{work_item_id}] {title}`
   - Example: `[AB#1234] Fix login page redirect`
-- Link the relevant work item in the PR description.
+- Always link the work item via `WorkItemRefs` on the `GitPullRequest`.
 
 ---
 
 ## Testing
 
-- **Python**: Unit tests with `pytest`. Test files in `agent/tests/`.
-- **TypeScript**: Unit tests with `vitest` or `jest`. Test files alongside source files (`*.test.ts`).
-- Run Python tests: `cd agent && pytest`
-- Run TypeScript tests: `cd mcp-servers/azure-devops && npm test`
+- **xUnit** + **FluentAssertions** + **Moq** for all tests.
+- Test files live in `tests/` mirroring `src/` structure.
+- Run all tests: `dotnet test MyAgent.slnx`
 
 ---
 
@@ -133,10 +134,8 @@ Create a `.env` file in the root (never commit it):
 
 ```env
 # Required
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
 AZURE_DEVOPS_PAT=your_personal_access_token_here
-
-# Optional
-FIGMA_ACCESS_TOKEN=your_figma_token_here
 ```
 
-The `config.json` file is the single source of truth for all non-secret configuration. Use the `_ENV` suffix pattern to reference environment variables (e.g., `"AZURE_DEVOPS_PAT_ENV"` means read from the `AZURE_DEVOPS_PAT` env var at runtime).
+All non-secret configuration is in `src/MyAgent.Orchestrator/Configuration/appsettings.json`.

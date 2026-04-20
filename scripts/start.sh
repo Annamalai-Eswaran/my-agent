@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-# Load .env if present
-if [ -f "$ROOT_DIR/.env" ]; then
-  set -o allexport
-  # shellcheck source=/dev/null
-  source "$ROOT_DIR/.env"
-  set +o allexport
+if [ -f ".env" ]; then
+    set -a
+    source .env
+    set +a
 fi
 
-cd "$ROOT_DIR"
-python3 agent/main.py
+echo "Starting AI Engineering Agent..."
+dotnet run --project src/MyAgent.Orchestrator --configuration Release

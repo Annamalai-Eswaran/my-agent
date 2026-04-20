@@ -1,9 +1,25 @@
+# .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+.vscode/
+appsettings.Development.json
+
+# Environment
+.env
+
+# Node (for community MCP servers run via npx)
 node_modules/
 dist/
+
+# Python (legacy - removed)
 __pycache__/
-.env
-.venv/
 *.pyc
-*.pyo
+.venv/
 *.egg-info/
+
+# OS
 .DS_Store
+Thumbs.db

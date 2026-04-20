@@ -12,21 +12,28 @@ The agent integrates with Azure DevOps (ADO) at `https://dev.azure.com/NAF-Tech/
 - Raise pull requests
 - Transition work item states
 
+The Azure DevOps MCP server is implemented in C# (`src/MyAgent.McpServer.AzureDevOps/`) using `Microsoft.TeamFoundationServer.Client`.
+
 ---
 
 ## Step-by-Step Complete Workflow
 
 ### Step 1: Query Work Items
 
-Use the `list_work_items` MCP tool with a WIQL query:
+Use the `list-ready-work-items` MCP tool (WIQL query is built in):
 
-```sql
-SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo], [System.WorkItemType]
-FROM WorkItems
-WHERE [System.TeamProject] = 'NAF Marketing'
-  AND [System.State] = 'Ready'
-  AND [System.WorkItemType] IN ('User Story', 'Task', 'Bug')
-ORDER BY [Microsoft.VSTS.Common.Priority] ASC, [System.CreatedDate] ASC
+```json
+{ "project": "NAF Marketing" }
+```
+
+Response:
+```json
+{
+  "workItems": [
+    { "id": 1234, "title": "Fix login redirect", "state": "Ready", "workItemType": "User Story" }
+  ],
+  "count": 1
+}
 ```
 
 **Common state values**: `New`, `Ready`, `Active`, `In Progress`, `Resolved`, `Done`, `Closed`
@@ -35,171 +42,122 @@ ORDER BY [Microsoft.VSTS.Common.Priority] ASC, [System.CreatedDate] ASC
 
 Present the list to the human:
 ```
-ask_human: "Here are the Ready work items:\n1. [AB#1234] Fix login redirect\n2. [AB#1235] Add dashboard widget\n\nWhich would you like to work on? (enter the number)"
+ask_human: "Here are the Ready work items:
+1. AB#1234 - Fix login redirect
+2. AB#1235 - Add dashboard widget
+
+Which would you like to work on? (enter the number)"
 ```
 
 ### Step 3: Create Feature Branch
 
-Call `create_branch` MCP tool:
+Call `create-branch` MCP tool:
 ```json
 {
-  "repositoryId": "your-repo-id-or-name",
-  "branchName": "feature/ae/1234-fix-login-redirect",
-  "sourceBranch": "develop"
+  "repositoryId": "my-repo",
+  "newBranchName": "feature/ae/1234-fix-login-redirect",
+  "sourceBranch": "develop",
+  "project": "NAF Marketing"
 }
 ```
 
-**Branch naming rule**: `feature/ae/{work_item_id}-{slugified-title}`
-- Slugify: lowercase, spaces → hyphens, remove special chars
-- Example: "Fix login redirect (urgent!)" → `fix-login-redirect-urgent`
+Branch name is generated using `BranchUtils.MakeBranchName(1234, "Fix login redirect")` → `feature/ae/1234-fix-login-redirect`.
 
 ### Step 4: Implement Changes
 
-Use filesystem and terminal MCP tools to:
-1. `git checkout feature/ae/1234-fix-login-redirect`
-2. Make code changes
-3. `git add .`
-4. `git commit -m "[AB#1234] Fix login redirect"`
-5. `git push origin feature/ae/1234-fix-login-redirect`
+Use filesystem and terminal MCP tools to write code. The branch is now checked out locally.
 
-### Step 5: Create Pull Request
+### Step 5: Commit and Push
 
-Call `create_pull_request` MCP tool:
+Via the terminal MCP:
+```bash
+git add .
+git commit -m "[AB#1234] Fix login redirect"
+git push origin feature/ae/1234-fix-login-redirect
+```
+
+### Step 6: Create Pull Request
+
+Call `create-pull-request` MCP tool:
 ```json
 {
-  "repositoryId": "your-repo-id-or-name",
-  "title": "[AB#1234] Fix login redirect",
-  "description": "## Summary\n\nFixes the login redirect issue.\n\n## Work Item\nAB#1234\n\n## Changes\n- Updated auth middleware\n- Fixed redirect URL construction",
+  "repositoryId": "my-repo",
   "sourceBranch": "feature/ae/1234-fix-login-redirect",
   "targetBranch": "develop",
-  "workItemIds": [1234]
-}
-```
-
-### Step 6: Update Work Item State
-
-Call `update_work_item` MCP tool:
-```json
-{
-  "id": 1234,
-  "fields": {
-    "System.State": "In Progress"
-  }
-}
-```
-
----
-
-## WIQL Query Patterns
-
-### All Ready User Stories
-```sql
-SELECT [System.Id], [System.Title], [System.State]
-FROM WorkItems
-WHERE [System.TeamProject] = 'NAF Marketing'
-  AND [System.WorkItemType] = 'User Story'
-  AND [System.State] = 'Ready'
-ORDER BY [Microsoft.VSTS.Common.Priority] ASC
-```
-
-### Work Items Assigned to Me
-```sql
-SELECT [System.Id], [System.Title], [System.State]
-FROM WorkItems
-WHERE [System.TeamProject] = 'NAF Marketing'
-  AND [System.AssignedTo] = @Me
-  AND [System.State] NOT IN ('Done', 'Closed')
-```
-
-### Work Items in Current Sprint
-```sql
-SELECT [System.Id], [System.Title], [System.State]
-FROM WorkItems
-WHERE [System.TeamProject] = 'NAF Marketing'
-  AND [System.IterationPath] UNDER @CurrentIteration('[NAF Marketing]\Team')
-  AND [System.State] NOT IN ('Done', 'Closed')
-```
-
-### High Priority Bugs
-```sql
-SELECT [System.Id], [System.Title], [System.State], [Microsoft.VSTS.Common.Priority]
-FROM WorkItems
-WHERE [System.TeamProject] = 'NAF Marketing'
-  AND [System.WorkItemType] = 'Bug'
-  AND [Microsoft.VSTS.Common.Priority] <= 2
-  AND [System.State] NOT IN ('Done', 'Closed')
-ORDER BY [Microsoft.VSTS.Common.Priority] ASC
-```
-
----
-
-## State Transitions
-
-```
-New → Ready → Active → In Progress → Resolved → Done
-                                              ↘ Closed
-```
-
-| From | To | When |
-|------|----|------|
-| `Ready` | `Active` | Work item is picked up |
-| `Active` | `In Progress` | Branch created, implementation started |
-| `In Progress` | `Resolved` | PR raised, awaiting review |
-| `Resolved` | `Done` | PR merged |
-
----
-
-## How Branch Creation Works via ADO Git Refs API
-
-Azure DevOps creates branches via the Git Refs API. The MCP `create_branch` tool wraps this:
-
-1. Fetch the latest commit SHA from the source branch (`develop`).
-2. POST to `/_apis/git/repositories/{repoId}/refs` with:
-   ```json
-   [
-     {
-       "name": "refs/heads/feature/ae/1234-fix-login-redirect",
-       "oldObjectId": "0000000000000000000000000000000000000000",
-       "newObjectId": "{sha-of-develop-HEAD}"
-     }
-   ]
-   ```
-
----
-
-## PR Work Item Linking
-
-When creating a PR via the ADO REST API, link work items using the `workItemRefs` array:
-```json
-{
   "title": "[AB#1234] Fix login redirect",
-  "sourceRefName": "refs/heads/feature/ae/1234-fix-login-redirect",
-  "targetRefName": "refs/heads/develop",
-  "workItemRefs": [
-    { "id": "1234" }
-  ]
+  "description": "Fixes the login page redirect issue as described in work item AB#1234.",
+  "workItemId": 1234,
+  "project": "NAF Marketing"
 }
+```
+
+### Step 7: Update Work Item State
+
+Call `update-work-item-state` MCP tool:
+```json
+{ "id": 1234, "state": "In Progress" }
+```
+
+### Step 8: Notify Human
+
+```
+ask_human: "PR #42 has been raised: [AB#1234] Fix login redirect. It's ready for your review."
 ```
 
 ---
 
-## Error Handling Patterns
+## Branch Naming Convention
 
-| Error | Cause | Recovery |
-|-------|-------|---------|
-| `401 Unauthorized` | Invalid or expired PAT | Ask human to update `AZURE_DEVOPS_PAT` in `.env` |
-| `404 Not Found` | Wrong project/repo name | Verify `config.json` project and repo names |
-| `409 Conflict` (branch) | Branch already exists | Use existing branch or ask human |
-| `TF400898` | Work item not found | Check the work item ID |
-| Rate limit (`429`) | Too many requests | Wait and retry with exponential backoff |
+```
+feature/ae/{work_item_id}-{slugified-description}
+```
+
+| Input | Output |
+|-------|--------|
+| ID: 1234, Title: "Fix Login Page" | `feature/ae/1234-fix-login-page` |
+| ID: 42, Title: "Add User Auth!" | `feature/ae/42-add-user-auth` |
+| ID: 100, Title: "   spaces  " | `feature/ae/100-spaces` |
+
+Rules:
+- Lowercase
+- Non-alphanumeric → `-`
+- Collapse multiple `-` → single `-`
+- Trim leading/trailing `-`
+- Max 50 chars for the slug portion
+
+Use `BranchUtils.MakeBranchName(id, title)` in C# code.
 
 ---
 
-## Authentication
+## PR Title Convention
 
-All ADO API calls use a **Personal Access Token (PAT)** with the following scopes:
-- `Work Items: Read & Write`
-- `Code: Read & Write` (for Git operations)
-- `Pull Request Threads: Read & Write`
+```
+[AB#{work_item_id}] {title}
+```
 
-The PAT is loaded from the `AZURE_DEVOPS_PAT` environment variable at runtime.
+Examples:
+- `[AB#1234] Fix login page redirect`
+- `[AB#42] Add dark mode toggle`
+
+---
+
+## Azure DevOps API Notes (.NET SDK)
+
+### Work Items
+- `WorkItemTrackingHttpClient.QueryByWiqlAsync(wiql)` — run WIQL query
+- `WorkItemTrackingHttpClient.GetWorkItemsAsync(ids, fields)` — batch fetch
+- `WorkItemTrackingHttpClient.UpdateWorkItemAsync(patchDoc, id)` — update fields
+- `WorkItem.Fields` is `IDictionary<string, object>` — use `TryGetValue` not `GetValueOrDefault`
+
+### Git
+- **IMPORTANT**: `GitHttpClient` methods put `project` as the **first** parameter.
+- `GetRefsAsync(project, repositoryId, filter)` — list refs/branches
+- `UpdateRefsAsync(refUpdates, project, repositoryId)` — create/delete branches
+- `CreatePullRequestAsync(pr, repositoryId, project)` — create PR
+
+### Authentication
+```csharp
+var credentials = new VssBasicCredential(string.Empty, pat);
+var connection = new VssConnection(new Uri(orgUrl), credentials);
+var gitClient = connection.GetClient<GitHttpClient>();
+```

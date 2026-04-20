@@ -1,67 +1,80 @@
 ---
-applyTo: "mcp-servers/**/tools/**"
+applyTo: "**/Tools/**"
 ---
 
-# MCP Tool Development Instructions
+# MCP Tool Development Instructions (C#)
 
-Follow these conventions for all MCP tool files under `mcp-servers/**/tools/`.
+Follow these conventions for all MCP tool files under `**/Tools/`.
 
 ## Tool Descriptions
 
-- Every tool registration **must** include a clear, concise description that an LLM can understand.
+- Every tool definition **must** include a clear, concise description that an LLM can understand.
 - The description should explain *what the tool does*, *what its key inputs are*, and *what it returns*.
 - Bad: `"Gets work item"`
 - Good: `"Fetch a single Azure DevOps work item by its numeric ID. Returns the title, state, assigned-to, description, and acceptance criteria."`
 
 ## Input Schemas
 
-- Use **Zod** for all input schemas.
-- Every field must have a `.describe("...")` annotation.
-- Use `.optional()` only for truly optional fields — mark required fields without it.
+- Input schemas are `JsonObject` instances with `"type"`, `"properties"`, and `"required"` keys.
+- Every property must have a `"description"` key so the LLM understands its purpose.
+- Use `["required"] = new JsonArray("field1", "field2")` for required fields.
 
-```typescript
-const schema = z.object({
-  id: z.number().describe("The numeric Azure DevOps work item ID (e.g., 1234)"),
-  fields: z.array(z.string()).optional().describe(
-    "List of fields to return. Defaults to common fields if omitted."
-  ),
-});
+```csharp
+InputSchema = new JsonObject
+{
+    ["type"] = "object",
+    ["properties"] = new JsonObject
+    {
+        ["id"] = new JsonObject
+        {
+            ["type"] = "integer",
+            ["description"] = "The numeric Azure DevOps work item ID (e.g. 1234)."
+        },
+        ["fields"] = new JsonObject
+        {
+            ["type"] = "array",
+            ["description"] = "List of fields to return. Defaults to common fields if omitted.",
+            ["items"] = new JsonObject { ["type"] = "string" }
+        }
+    },
+    ["required"] = new JsonArray("id")
+}
 ```
 
 ## Response Format
 
-- Return **structured JSON** as the text content:
-  ```typescript
-  return {
-    content: [{
-      type: "text",
-      text: JSON.stringify({ id, title, state, assignedTo }, null, 2),
-    }],
+- Return **structured JSON** as a `JsonObject` from the handler:
+  ```csharp
+  return new JsonObject
+  {
+      ["id"] = wi.Id,
+      ["title"] = title,
+      ["state"] = state
   };
   ```
-- Do not return raw HTML or unstructured prose in tool responses.
+- The MCP server's `Program.cs` wraps this in `{ "content": [{ "type": "text", "text": "..." }] }`.
+- Do not return raw HTML or unstructured prose.
 
 ## Error Responses
 
 - Error messages must be **human-readable** so the LLM can understand and potentially recover.
-- Include the error type and the original message:
-  ```typescript
-  return {
-    content: [{
-      type: "text",
-      text: `Failed to fetch work item ${id}: ${(err as Error).message}`,
-    }],
-  };
+- Return a `JsonObject` with an `"error"` key on failure:
+  ```csharp
+  catch (Exception ex)
+  {
+      return new JsonObject { ["error"] = $"Failed to fetch work item {id}: {ex.Message}" };
+  }
   ```
 
 ## File Organization
 
-- Group related tools in the same file (e.g., all work item operations in `work-items.ts`).
-- Each file exports a single `register*Tools(server: McpServer)` function.
-- Keep each tool handler focused — extract complex logic into private helper functions.
+- Group related tools in the same file (e.g., all work item operations in `WorkItemTools.cs`).
+- Each file has a `GetDefinitions()` static method returning `IEnumerable<ToolDefinition>`.
+- Each tool handler is a `public static async Task<JsonObject>` method.
+- Keep each tool handler focused — extract complex logic into private helper methods.
 
 ## Naming Conventions
 
-- Tool names use **snake_case**: `get_work_item`, `create_pull_request`, `list_branches`.
-- File names use **kebab-case**: `work-items.ts`, `pull-requests.ts`, `git.ts`.
-- Registration functions use **PascalCase** for the domain: `registerWorkItemTools`, `registerGitTools`.
+- Tool names use **kebab-case**: `get-work-item`, `create-pull-request`, `list-branches`.
+- File names use **PascalCase**: `WorkItemTools.cs`, `PullRequestTools.cs`, `BranchTools.cs`.
+- Handler methods use **PascalCase**: `GetWorkItemAsync`, `CreatePullRequestAsync`.
