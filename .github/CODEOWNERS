@@ -1,0 +1,12 @@
+# Code Owners
+
+# Agent orchestrator
+/agent/ @Annamalai-Eswaran
+
+# MCP Servers
+/mcp-servers/ @Annamalai-Eswaran
+
+# Copilot & AI config
+/.github/copilot-instructions.md @Annamalai-Eswaran
+/AGENTS.md @Annamalai-Eswaran
+/CLAUDE.md @Annamalai-Eswaran
