@@ -6,11 +6,7 @@ using MyAgent.Orchestrator.Agent;
 using MyAgent.Orchestrator.Configuration;
 using MyAgent.Orchestrator.Mcp;
 
-// Load .env from current directory or repo root
-var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
-if (File.Exists(envPath))
-    LoadEnvFile(envPath);
-
+// Load .env — repo root first, then current directory (current dir takes precedence)
 var repoRoot = FindRepoRoot(Directory.GetCurrentDirectory());
 if (repoRoot != null)
 {
@@ -18,6 +14,10 @@ if (repoRoot != null)
     if (File.Exists(rootEnvPath))
         LoadEnvFile(rootEnvPath);
 }
+
+var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+if (File.Exists(envPath))
+    LoadEnvFile(envPath);
 
 var builder = Host.CreateDefaultBuilder(args)
     .ConfigureAppConfiguration((_, cfg) =>

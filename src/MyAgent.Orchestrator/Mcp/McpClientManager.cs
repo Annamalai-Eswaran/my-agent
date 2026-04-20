@@ -120,7 +120,7 @@ internal class McpServerProcess : IAsyncDisposable
 
         // Copy current env then overlay server-specific entries
         foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
-            psi.Environment[entry.Key!.ToString()!] = entry.Value?.ToString() ?? "";
+            psi.Environment[entry.Key.ToString()!] = entry.Value?.ToString() ?? "";
         foreach (var (k, v) in _config.Env)
         {
             var resolved = System.Environment.GetEnvironmentVariable(v) ?? v;

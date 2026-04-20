@@ -7,7 +7,7 @@
 
 ## Project Summary
 
-This is **my-agent**: an AI-powered software engineering agent that automates the daily developer workflow using Azure DevOps and MCP servers. The runtime LLM is **Claude Opus 4.6 via GitHub Copilot**.
+This is **my-agent**: an AI-powered software engineering agent built in **.NET 8 (C#)** that automates the daily developer workflow using Azure DevOps and MCP servers. The runtime LLM is **Claude Opus 4.6 via `Anthropic.SDK`**.
 
 See `AGENTS.md` for the full architecture and component guide.
 
@@ -21,6 +21,7 @@ feature/ae/{work_item_id}-{slugified-description}
 ```
 - Always create branches from `develop`.
 - Example: `feature/ae/1234-add-login-button`
+- Use `BranchUtils.MakeBranchName(id, title)` in C# code.
 
 ### 2. PR Titles (to Azure DevOps)
 ```
@@ -28,7 +29,7 @@ feature/ae/{work_item_id}-{slugified-description}
 ```
 - Example: `[AB#1234] Add login button to navigation`
 - Target branch: `develop`
-- Always link the work item in the PR description.
+- Always link the work item via `WorkItemRefs` on `GitPullRequest`.
 
 ### 3. Use `ask_human` When Unsure
 - **If you are unsure about requirements, scope, or approach — use `ask_human`.**
@@ -40,38 +41,35 @@ feature/ae/{work_item_id}-{slugified-description}
 
 ## Available MCP Tools
 
-### Azure DevOps MCP Server
+### Azure DevOps MCP Server (`MyAgent.McpServer.AzureDevOps`)
 | Tool | Purpose |
 |------|---------|
-| `list_work_items` | WIQL query to fetch work items (filter by state, type, iteration) |
-| `get_work_item` | Fetch a single work item by ID with all fields |
-| `update_work_item` | Update fields or transition state of a work item |
-| `list_repositories` | List all Git repositories in the ADO project |
-| `create_branch` | Create a new branch from a source ref |
-| `list_branches` | List branches in a repository |
-| `create_pull_request` | Create a PR with title, description, work item links |
-| `get_pull_request` | Fetch PR details by ID |
-| `list_pull_requests` | List PRs with optional filters |
+| `list-ready-work-items` | WIQL query to fetch work items in "Ready" state |
+| `get-work-item` | Fetch a single work item by ID with all fields |
+| `update-work-item-state` | Transition work item state (e.g. Ready → Active → Done) |
+| `list-repositories` | List all Git repositories in the ADO project |
+| `create-branch` | Create a new branch from `develop` |
+| `list-branches` | List branches in a repository |
+| `create-pull-request` | Create a PR with title, description, work item link |
+| `get-pull-request` | Fetch PR details by ID |
+| `list-pull-requests` | List PRs with optional status filter |
 
 ### Filesystem MCP Server
 Standard file operations: read, write, list directory, search.
 
 ### Terminal MCP Server
-Run shell commands: `git`, `npm`, `python`, `bash`, etc.
-
-### Figma MCP Server (optional)
-Design file access — only available if `FIGMA_ACCESS_TOKEN` is set and `"enabled": true` in `config.json`.
+Run shell commands: `git`, `dotnet`, `bash`, etc.
 
 ### Built-in Tools (not MCP)
 | Tool | Purpose |
 |------|---------|
-| `ask_human` | Prompt the human for input and return their response |
+| `ask_human` | Prompt the human for input via colored terminal I/O |
 
 ---
 
 ## Workflow Reminder
 
-1. **List work items** in "Ready" state using WIQL.
+1. **List work items** in "Ready" state using `list-ready-work-items`.
 2. **Ask the human** which item to work on (or auto-select).
 3. **Create branch**: `feature/ae/{id}-{slug}` from `develop`.
 4. **Implement** using filesystem + terminal tools.
@@ -84,29 +82,36 @@ Design file access — only available if `FIGMA_ACCESS_TOKEN` is set and `"enabl
 
 ## Code Standards
 
-### Python Files (`**/*.py`)
-- PEP 8, type hints, async/await, specific exception handling, `python-dotenv`.
-- MCP calls need timeout handling (`asyncio.timeout(30)`).
+### C# Files (`**/*.cs`)
+- net8.0, `<Nullable>enable</Nullable>`, `<ImplicitUsings>enable</ImplicitUsings>`.
+- Records for models, classes for services.
+- `async`/`await` for I/O, `ILogger<T>` for logging.
+- Constructor injection, no service locator pattern.
 
-### TypeScript Files (`**/*.ts`)
-- Strict mode, ES2022, Zod for input validation, `@modelcontextprotocol/sdk` patterns.
-- Return structured JSON from tool handlers.
+### MCP Tool Files (`**/Tools/**`)
+- `GetDefinitions()` returns `IEnumerable<ToolDefinition>`.
+- Each handler is a static `async Task<JsonObject>` method.
+- Always catch exceptions, return `{ "error": "..." }` JsonObject.
 
-### MCP Tool Files (`mcp-servers/**/tools/**`)
-- Clear LLM-readable descriptions, Zod schemas with `.describe()`, structured JSON responses.
+### Anthropic.SDK
+- Use `Common.Tool` (not `Messaging.Tool`).
+- `ToolResultContent.ToolUseId` (not `.Id`); `.Content` is a `string`.
+- `MessageParameters.SystemMessage` is a `string`.
 
 ---
 
 ## Build Commands
 
 ```bash
-# Build MCP server
-cd mcp-servers/azure-devops && npm install && npm run build
+# Build everything
+dotnet build MyAgent.slnx
 
-# Install Python deps
-cd agent && pip install -r requirements.txt
+# Run tests
+dotnet test MyAgent.slnx
 
-# Start everything
+# Start the agent
+dotnet run --project src/MyAgent.Orchestrator
+# or:
 ./scripts/start.sh
 ```
 
@@ -115,13 +120,13 @@ cd agent && pip install -r requirements.txt
 ## Key Files to Read First
 
 1. `AGENTS.md` — full architecture and workflow guide
-2. `config.json` — agent configuration
-3. `agent/main.py` — orchestrator entry point
-4. `agent/prompts.py` — system prompt
-5. `mcp-servers/azure-devops/src/index.ts` — MCP server entry point
+2. `src/MyAgent.Orchestrator/Configuration/appsettings.json` — agent configuration
+3. `src/MyAgent.Orchestrator/Agent/EngineerAgent.cs` — main agentic loop
+4. `src/MyAgent.Orchestrator/Agent/SystemPrompts.cs` — LLM system prompt
+5. `src/MyAgent.McpServer.AzureDevOps/Program.cs` — MCP server entry point
 
 ---
 
 ## Note on This Project's Runtime
 
-This agent itself uses Claude Opus 4.6 via the GitHub Copilot API at runtime. If you are Claude reading this: you are both the tool being used *and* being asked to help build/maintain the tool. Keep that context in mind when making changes.
+This agent uses Claude Opus 4.6 via `Anthropic.SDK` at runtime. If you are Claude reading this: you are both the tool being used *and* being asked to help build/maintain the tool. Keep that context in mind when making changes.
